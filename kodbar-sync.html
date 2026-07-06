@@ -76,8 +76,12 @@
   /* Scan */
   .progress-wrap{padding:0 14px 10px}
   .progress-txt{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin:10px 0 6px}.progress-txt b{color:var(--text)}
-  .scan-grid{display:grid;gap:14px;padding:0 14px 24px}
-  @media(min-width:720px){.scan-grid{grid-template-columns:1fr 1fr;align-items:start}}
+  .scan-single{display:flex;flex-direction:column;gap:14px;padding:0 14px 24px;max-width:640px;margin:0 auto}
+  .scanpad{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center}
+  .scanpad-hint{font-size:13px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}
+  #scan-input{width:100%;text-align:center;font-family:var(--font-mono);font-size:22px;letter-spacing:2px;padding:16px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text)}
+  #scan-input:focus{outline:2px solid var(--primary);outline-offset:1px;border-color:transparent}
+  #scan-input::placeholder{color:var(--muted-2);font-size:15px;letter-spacing:normal;font-family:var(--font-ui)}
   .product{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
   .product .pos{font-family:var(--font-mono);font-size:12px;color:var(--muted-2);letter-spacing:1px}
   .product .label{font-size:22px;font-weight:800;line-height:1.2;margin:4px 0 2px;word-break:break-word}
@@ -99,15 +103,7 @@
   .badge.good{color:var(--ok);border-color:var(--ok-dim);background:#0e1c12}
   .badge.warn{color:var(--warn);border-color:var(--warn-dim);background:#1c170a}
   .badge.dup{color:var(--danger);border-color:var(--danger-dim);background:#1c0f0e;cursor:pointer}
-  .cam{background:#000;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;position:relative;aspect-ratio:4/3}
-  .cam video{width:100%;height:100%;object-fit:cover;display:block}
-  .cam .placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:20px;color:var(--muted)}
-  .cam .placeholder .big{font-size:40px}
-  .reticle{position:absolute;inset:0;pointer-events:none;display:none}.reticle.on{display:block}
-  .reticle .frame{position:absolute;left:10%;right:10%;top:28%;bottom:28%;border:2px solid rgba(255,255,255,.35);border-radius:12px}
-  .reticle .line{position:absolute;left:12%;right:12%;top:50%;height:2px;background:var(--danger);box-shadow:0 0 8px var(--danger);animation:sweep 2s ease-in-out infinite}
-  @keyframes sweep{0%,100%{transform:translateY(-42px)}50%{transform:translateY(42px)}}
-  .cam-msg{padding:10px 12px;font-size:13px;color:var(--warn);background:#1c170a;border:1px solid var(--warn-dim);border-radius:var(--radius-sm);margin-top:10px;display:none}.cam-msg.show{display:block}
+  /* (caméra retirée — scan par PDA/douchette) */
   .flash{position:fixed;inset:0;z-index:50;background:rgba(63,185,80,0);pointer-events:none;transition:background .08s}
   .flash.on{background:rgba(63,185,80,.28)}.flash.dup{background:rgba(248,81,73,.24)}
   .manual{margin-top:12px}.manual .row2{display:flex;gap:8px}.manual .row2 input{flex:1}
@@ -170,8 +166,8 @@
       <div class="big">🔌</div>
       <h2>Configuration Supabase requise</h2>
       <p style="color:var(--muted)">Ouvre <b>kodbar-sync.html</b> et renseigne tes deux constantes en haut du script, puis redéploie :</p>
-      <div class="codeblk">const SUPABASE_URL = "https://bpxsfxivvmojwbowhsuf.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJweHNmeGl2dm1vandib3doc3VmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5NzU0NDAsImV4cCI6MjA5ODU1MTQ0MH0.6HgzVlfmrYA4PgjULs8rM8Lfjhug-ixx_utOQZFVvlY";</div>
+      <div class="codeblk">const SUPABASE_URL = "https://xxxx.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOi...";</div>
       <p style="color:var(--muted-2);font-size:13px;margin-top:12px">URL &amp; clé <b>anon</b> : Supabase &gt; Project Settings &gt; API. La clé anon est publique par conception (protégée par RLS + token).</p>
     </section>
 
@@ -243,7 +239,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
         <div class="progress-txt"><span id="prog-label">0 sur 0</span><b id="prog-pct">0%</b></div>
         <div class="bar"><i id="prog-bar"></i></div>
       </div>
-      <div class="scan-grid">
+      <div class="scan-single">
         <div class="product">
           <div class="pos" id="p-pos">— / —</div>
           <div class="label" id="p-label">—</div>
@@ -257,18 +253,10 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
             <div class="badges" id="p-badges"></div>
           </div>
         </div>
-        <div>
-          <div class="cam">
-            <video id="video" playsinline muted></video>
-            <div class="placeholder" id="cam-placeholder"><div class="big">📷</div><div>Caméra éteinte</div><button class="btn primary small" id="btn-cam-start">Activer la caméra</button></div>
-            <div class="reticle" id="reticle"><div class="frame"></div><div class="line"></div></div>
-          </div>
-          <button class="btn ghost small" id="btn-cam-stop" style="width:100%;margin-top:8px;display:none">Couper la caméra</button>
-          <div class="cam-msg" id="cam-msg"></div>
-          <div class="manual">
-            <div class="row2"><input type="text" id="manual-input" inputmode="numeric" placeholder="Saisir / coller un code" autocomplete="off"><button class="btn primary" id="btn-manual">Valider</button></div>
-            <div class="note">Compatible douchette USB/Bluetooth : code + Entrée capté automatiquement.</div>
-          </div>
+        <div class="scanpad">
+          <div class="scanpad-hint">Scanne le code-barres avec le PDA</div>
+          <input type="text" id="scan-input" inputmode="none" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="En attente d'un scan…">
+          <button class="btn ghost small" id="btn-kbd" style="width:100%;margin-top:8px">Saisir à la main</button>
         </div>
       </div>
     </section>
@@ -313,7 +301,6 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const SB_CDN='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
 const XLSX_CDN='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-const ZXING_CDN='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
 const QR_CDN='https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
 
 const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
@@ -345,7 +332,6 @@ async function rpc(fn,args){ const c=await ensureSB(); const {data,error}=await 
 
 function loadScript(src){ return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('load '+src));document.head.appendChild(s);}); }
 let _xlsx=null; async function ensureXLSX(){ if(window.XLSX)return; if(!_xlsx)_xlsx=loadScript(XLSX_CDN); await _xlsx; }
-let _zxing=null; async function ensureZXing(){ if(window.ZXing)return; if(!_zxing)_zxing=loadScript(ZXING_CDN); await _zxing; }
 let _qr=null; async function ensureQR(){ if(window.qrcode)return; if(!_qr)_qr=loadScript(QR_CDN); await _qr; }
 
 /* =====================================================================
@@ -555,6 +541,7 @@ function renderScan(){
     if(r.code.length>18)badges.insertAdjacentHTML('beforeend',`<span class="badge warn">⚠ trop long</span>`);
     const dup=duplicatesOf(r.code,S.i); if(dup.length){badges.insertAdjacentHTML('beforeend',`<span class="badge dup" id="dup-badge">⚠ doublon (${dup.length})</span>`); $('#dup-badge').onclick=()=>{openList();$('#list-search').value=r.code;renderList();};}
   } else { box.className='code-box empty'; box.innerHTML=`<span class="num">non scanné</span>`; badges.innerHTML=''; }
+  focusScan();
 }
 function goPrev(){ if(!S)return; S.i=(S.i-1+S.rows.length)%S.rows.length; renderScan(); }
 function goNext(){ if(!S)return; S.i=(S.i+1)%S.rows.length; renderScan(); }
@@ -580,27 +567,11 @@ function vibrate(p){ if(settings.vibrate&&navigator.vibrate)try{navigator.vibrat
 function guessFormat(c){ if(/^\d{13}$/.test(c))return'EAN-13'; if(/^\d{12}$/.test(c))return'UPC-A'; if(/^\d{8}$/.test(c))return'EAN-8'; if(/^\d{14}$/.test(c))return'ITF-14'; if(/^\d+$/.test(c))return c.length+' chiffres'; return'code'; }
 function eanChecksum(c){ if(!/^\d+$/.test(c))return null; if(![8,12,13].includes(c.length))return null; const d=c.split('').map(Number),ch=d.pop(); let s=0; d.reverse().forEach((n,i)=>s+=n*(i%2===0?3:1)); return ((10-(s%10))%10)===ch; }
 
-/* Caméra */
-const Scanner={ video:null,stream:null,detector:null,timer:null,zxing:null,running:false,last:{code:'',t:0},
-  uiLive(){camMsg('');$('#cam-placeholder').style.display='none';$('#reticle').classList.add('on');$('#btn-cam-stop').style.display='block';},
-  async start(){ this.video=$('#video'); const nat=('BarcodeDetector' in window);
-    try{ if(nat){ this.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}); this.video.srcObject=this.stream; await this.video.play();
-        const sup=await BarcodeDetector.getSupportedFormats(); const want=['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','itf','codabar','qr_code','data_matrix']; const fmt=want.filter(f=>sup.includes(f));
-        this.detector=new BarcodeDetector(fmt.length?{formats:fmt}:undefined); this.uiLive(); this.running=true; this.loop();
-      } else { await this.startZ(); this.uiLive(); this.running=true; }
-    }catch(err){ console.error(err); this.running=false; $('#reticle').classList.remove('on');
-      if(err&&(err.name==='NotAllowedError'||err.name==='SecurityError'))camMsg('Accès caméra refusé. Autorise la caméra (page en HTTPS requise). Saisie manuelle / douchette disponibles.');
-      else if(err&&err.name==='NotFoundError')camMsg('Aucune caméra détectée. Saisie manuelle / douchette disponibles.');
-      else camMsg('Caméra indisponible ici. Saisie manuelle / douchette disponibles.'); }
-  },
-  loop(){ this.timer=setInterval(async()=>{ if(!this.running||!this.detector)return; try{const c=await this.detector.detect(this.video); if(c&&c.length)this.handle(c[0].rawValue);}catch(e){} },220); },
-  async startZ(){ try{ await ensureZXing(); this.zxing=new ZXing.BrowserMultiFormatReader(); const cb=(res)=>{if(res)this.handle(res.getText());}; if(typeof this.zxing.decodeFromConstraints==='function')await this.zxing.decodeFromConstraints({video:{facingMode:'environment'}},this.video,cb); else await this.zxing.decodeFromVideoDevice(undefined,this.video,cb);}catch(e){console.error(e);camMsg('Lecteur indisponible. Saisie manuelle / douchette.');} },
-  handle(code){ code=String(code||'').trim(); if(!code)return; const n=Date.now(); if(code===this.last.code&&n-this.last.t<1600)return; this.last={code,t:n}; assignCode(code,'camera'); },
-  stop(){ this.running=false; if(this.timer){clearInterval(this.timer);this.timer=null;} if(this.zxing){try{this.zxing.reset();}catch(e){}this.zxing=null;} if(this.stream){this.stream.getTracks().forEach(t=>t.stop());this.stream=null;} if(this.video)this.video.srcObject=null; this.detector=null; this.last={code:'',t:0}; $('#reticle').classList.remove('on'); $('#cam-placeholder').style.display='flex'; $('#btn-cam-stop').style.display='none'; }
-};
-function camMsg(m){ const e=$('#cam-msg'); if(m){e.textContent=m;e.classList.add('show');}else e.classList.remove('show'); }
+/* Scan PDA / douchette (wedge) — pas de caméra */
+function focusScan(){ if(MODE!=='scanner')return; if($('#screen-scan').classList.contains('hidden'))return; if(document.querySelector('.modal.show'))return; const si=$('#scan-input'); if(si){ try{si.focus({preventScroll:true});}catch(e){si.focus();} } }
+/* Filet de sécurité : capte le PDA même si le champ n'a pas le focus (rafale de touches + Entrée) */
 let gunBuf='',gunT=0;
-document.addEventListener('keydown',e=>{ if(currentView!=='scan')return; const t=(e.target.tagName||'').toLowerCase(); if(t==='input'||t==='textarea'||t==='select')return; const n=Date.now(); if(n-gunT>120)gunBuf=''; gunT=n; if(e.key==='Enter'){if(gunBuf.length>=3)assignCode(gunBuf.trim(),'douchette');gunBuf='';return;} if(e.key.length===1)gunBuf+=e.key; });
+document.addEventListener('keydown',e=>{ if(currentView!=='scan')return; const t=(e.target.tagName||'').toLowerCase(); if(t==='input'||t==='textarea'||t==='select')return; const n=Date.now(); if(n-gunT>120)gunBuf=''; gunT=n; if(e.key==='Enter'){if(gunBuf.length>=3)assignCode(gunBuf.trim(),'PDA');gunBuf='';return;} if(e.key.length===1)gunBuf+=e.key; });
 
 /* Liste */
 function openList(){ renderList(); $('#modal-list').classList.add('show'); }
@@ -632,16 +603,18 @@ function init(){
 
   if(MODE==='scanner'){
     // mobile
-    $('#btn-cam-start').onclick=()=>{ if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume(); Scanner.start(); };
-    $('#btn-cam-stop').onclick=()=>Scanner.stop();
-    const mi=$('#manual-input'); const sub=()=>{const v=mi.value.trim(); if(v){assignCode(v,'saisie');mi.value='';}}; $('#btn-manual').onclick=sub; mi.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sub();}});
+    const si=$('#scan-input');
+    const submitScan=()=>{ const v=si.value.trim(); si.value=''; si.setAttribute('inputmode','none'); if(v)assignCode(v,'PDA'); focusScan(); };
+    si.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); submitScan(); } });
+    $('#btn-kbd').onclick=()=>{ si.setAttribute('inputmode','numeric'); si.focus(); toast('Clavier activé — tape le code puis Entrée'); };
+    ['click','keydown','touchstart'].forEach(ev=>document.addEventListener(ev,()=>{ try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==='suspended')audioCtx.resume(); }catch(e){} },{once:true}));
     $('#p-toggle').onclick=()=>{const d=$('#p-details');const o=d.classList.toggle('open');$('#p-toggle').textContent=o?'Masquer les détails ▴':'Voir les détails ▾';};
     $('#btn-prev').onclick=goPrev; $('#btn-next').onclick=goNext; $('#btn-jump-next').onclick=goNextTodo;
     $('#btn-list').onclick=openList; $('#btn-settings').onclick=openSettings;
     $('#list-search').addEventListener('input',renderList);
     $$('.filters button').forEach(b=>b.onclick=()=>{$$('.filters button').forEach(x=>x.classList.remove('active'));b.classList.add('active');listFilter=b.dataset.filter;renderList();});
     $('#ss-retry').onclick=loadScannerSession;
-    $('#btn-refetch').onclick=()=>{ $('#modal-settings').classList.remove('show'); Scanner.stop(); loadScannerSession(); };
+    $('#btn-refetch').onclick=()=>{ $('#modal-settings').classList.remove('show'); loadScannerSession(); };
     bindSettings();
     loadScannerSession();
   } else {
@@ -668,8 +641,8 @@ function bindSettings(){
   $('#set-sound').onchange=e=>{settings.sound=e.target.checked;saveSettings();};
   $('#set-vibrate').onchange=e=>{settings.vibrate=e.target.checked;saveSettings();};
 }
-$$('[data-close]').forEach(b=>b.onclick=()=>b.closest('.modal').classList.remove('show'));
-$$('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('show');}));
+$$('[data-close]').forEach(b=>b.onclick=()=>{ b.closest('.modal').classList.remove('show'); focusScan(); });
+$$('.modal').forEach(m=>m.addEventListener('click',e=>{if(e.target===m){m.classList.remove('show'); focusScan();}}));
 $('#btn-copy-url').onclick=()=>{ const u=$('#sess-url').value; navigator.clipboard.writeText(u).then(()=>toast('Lien copié'),()=>toast('Copie impossible')); };
 document.addEventListener('DOMContentLoaded',init);
 </script>
