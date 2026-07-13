@@ -183,6 +183,21 @@
   .toast{position:fixed;left:50%;bottom:88px;transform:translateX(-50%);background:var(--surface-3);border:1px solid var(--border);color:var(--text);padding:11px 16px;border-radius:99px;font-size:13.5px;z-index:80;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%}
   .toast.show{opacity:1}
   .hidden{display:none !important}
+
+  /* ---- additions rebuild ---- */
+  .sink{position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;border:0;padding:0;font-size:16px}
+  .scan-status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);padding:2px 14px 10px}
+  .scan-status .d2{width:9px;height:9px;border-radius:50%;background:var(--muted-2);flex:0 0 auto;transition:.2s}
+  .scan-status.armed .d2{background:var(--ok);box-shadow:0 0 7px var(--ok)}
+  .scan-status .rearm{margin-left:auto;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);font:inherit;font-size:12px;padding:5px 10px;border-radius:99px;cursor:pointer}
+  .code-box.filled{border-style:solid;border-color:var(--ok-dim);background:#0e1c12}
+  .code-box.dup{border-style:solid;border-color:var(--danger);background:#1c0f0e}
+  .code-box .num.ok{color:var(--ok)}
+  .code-box .num.bad{color:var(--danger)}
+  .flash.info{background:rgba(47,129,247,.20)}
+  .navbar .btn.mid{flex:1.3}
+  .list-item .badge-mini{font-family:var(--font-mono);font-size:11px;color:var(--danger);border:1px solid var(--danger-dim);background:#1c0f0e;border-radius:6px;padding:1px 6px;margin-left:6px}
+  .idwarn{font-size:12px;color:var(--warn);background:#1c170a;border:1px solid var(--warn-dim);border-radius:8px;padding:8px 10px;margin-top:8px}
 </style>
 </head>
 <body>
@@ -193,7 +208,7 @@
       <div class="top-sub">Association code-barres → articles</div>
     </div>
     <div class="top-actions" id="top-actions" style="display:none">
-      <button class="iconbtn" id="btn-list" title="Liste">☰<span class="dot hidden" id="list-count"></span></button>
+      <button class="iconbtn" id="btn-list" title="Chercher un article">🔎<span class="dot hidden" id="list-count"></span></button>
       <button class="iconbtn" id="btn-export" title="Exporter">⬇</button>
       <button class="iconbtn" id="btn-settings" title="Réglages">⚙</button>
     </div>
@@ -213,17 +228,17 @@
 
       <div class="card" id="import-card">
         <h2>Importer la liste d'articles</h2>
-        <p class="hint">Charge ton fichier (CSV, Excel .xlsx/.xls). La 1<sup>re</sup> ligne doit contenir les en-têtes de colonnes.</p>
+        <p class="hint">Charge ton fichier (Excel .xlsx/.xls ou CSV). La 1<sup>re</sup> ligne doit contenir les en-têtes.</p>
         <label class="dropzone" id="dropzone" for="file-input">
           <div class="big">📄</div>
           <div class="t">Choisir un fichier</div>
-          <div class="s">ou glisser-déposer ici · CSV / XLSX / XLS</div>
+          <div class="s">ou glisser-déposer · XLSX / XLS / CSV</div>
         </label>
         <input type="file" id="file-input" accept=".csv,.tsv,.txt,.xlsx,.xls">
       </div>
 
       <div class="card hidden" id="config-card">
-        <h2>Configurer</h2>
+        <h2>Configurer les colonnes</h2>
         <div class="preview-meta" id="preview-meta"></div>
         <div class="tablewrap"><table id="preview-table"></table></div>
 
@@ -232,7 +247,7 @@
           <select id="col-label"></select>
         </div>
         <div class="field">
-          <label for="col-variant">Variante / saveur (affichée sous le nom)</label>
+          <label for="col-variant">Variante / saveur (sous le nom)</label>
           <select id="col-variant"></select>
         </div>
         <div class="field">
@@ -240,13 +255,18 @@
           <select id="col-code"></select>
         </div>
         <div class="field">
-          <label for="col-key">Colonne clé pour ré-import (SKU / référence)</label>
+          <label for="col-id">Clé de ré-import Odoo — <b>ID externe</b> (recommandé)</label>
+          <select id="col-id"></select>
+        </div>
+        <div class="field">
+          <label for="col-key">Référence interne (SKU · affichée, secours)</label>
           <select id="col-key"></select>
         </div>
+        <div class="idwarn hidden" id="cfg-keywarn"></div>
 
         <div class="row" style="margin-top:16px">
           <button class="btn ghost" id="btn-cancel-config">Changer de fichier</button>
-          <button class="btn primary" id="btn-start">Commencer le scan</button>
+          <button class="btn primary" id="btn-start">Commencer</button>
         </div>
       </div>
     </section>
@@ -256,6 +276,11 @@
       <div class="progress-wrap">
         <div class="progress-txt"><span id="prog-label">0 sur 0</span><b id="prog-pct">0%</b></div>
         <div class="bar"><i id="prog-bar"></i></div>
+      </div>
+
+      <div class="scan-status" id="scan-status">
+        <span class="d2"></span><span id="scan-status-txt">Scanner PDA prêt — gâchette pour scanner</span>
+        <button class="rearm" id="btn-rearm">Réarmer</button>
       </div>
 
       <div class="scan-grid">
@@ -277,46 +302,52 @@
         </div>
 
         <div>
-          <div class="cam">
-            <video id="video" playsinline muted></video>
-            <div class="placeholder" id="cam-placeholder">
-              <div class="big">📷</div>
-              <div>Caméra éteinte</div>
-              <button class="btn primary small" id="btn-cam-start">Activer la caméra</button>
-            </div>
-            <div class="reticle" id="reticle"><div class="frame"></div><div class="line"></div></div>
-          </div>
-          <button class="btn ghost small" id="btn-cam-stop" style="width:100%;margin-top:8px;display:none">Couper la caméra</button>
-          <div class="cam-msg" id="cam-msg"></div>
-
           <div class="manual">
             <div class="row2">
               <input type="text" id="manual-input" inputmode="numeric" placeholder="Saisir / coller un code" autocomplete="off">
               <button class="btn primary" id="btn-manual">Valider</button>
             </div>
-            <div class="note">Compatible douchette USB/Bluetooth : le code saisi + Entrée est capté automatiquement.</div>
+            <div class="note">Le PDA SUNMI (sortie clavier + Entrée) est capté automatiquement, sans toucher ce champ.</div>
           </div>
+
+          <details style="margin-top:12px">
+            <summary style="cursor:pointer;color:var(--muted);font-size:13px">📷 Utiliser la caméra (secours)</summary>
+            <div class="cam" style="margin-top:10px">
+              <video id="video" playsinline muted></video>
+              <div class="placeholder" id="cam-placeholder">
+                <div class="big">📷</div>
+                <div>Caméra éteinte</div>
+                <button class="btn primary small" id="btn-cam-start">Activer la caméra</button>
+              </div>
+              <div class="reticle" id="reticle"><div class="frame"></div><div class="line"></div></div>
+            </div>
+            <button class="btn ghost small" id="btn-cam-stop" style="width:100%;margin-top:8px;display:none">Couper la caméra</button>
+            <div class="cam-msg" id="cam-msg"></div>
+          </details>
         </div>
       </div>
     </section>
   </main>
 
   <div class="navbar hidden" id="navbar">
-    <button class="btn ghost" id="btn-prev">◀ Précédent</button>
-    <button class="btn ghost" id="btn-jump-next">Suivant à faire</button>
-    <button class="btn ghost" id="btn-next">Suivant ▶</button>
+    <button class="btn ghost" id="btn-prev">◀</button>
+    <button class="btn ghost mid" id="btn-jump-next">Prochain à faire</button>
+    <button class="btn ghost" id="btn-next">▶</button>
   </div>
 </div>
+
+<!-- capteur invisible pour la douchette / PDA -->
+<input class="sink" id="sink" inputmode="none" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-hidden="true" tabindex="-1">
 
 <div class="flash" id="flash"></div>
 <div class="toast" id="toast"></div>
 
-<!-- Modale liste -->
+<!-- Modale liste / recherche -->
 <div class="modal" id="modal-list">
   <div class="sheet">
-    <div class="sheet-head"><h3>Articles</h3><button class="iconbtn" data-close>✕</button></div>
+    <div class="sheet-head"><h3>Chercher un article</h3><button class="iconbtn" data-close>✕</button></div>
     <div class="sheet-body">
-      <input type="text" id="list-search" placeholder="Rechercher (nom ou saveur)…" style="margin-bottom:12px" autocomplete="off">
+      <input type="text" id="list-search" placeholder="Nom, saveur, référence ou code…" style="margin-bottom:12px" autocomplete="off">
       <div class="filters">
         <button data-filter="all" class="active">Tous</button>
         <button data-filter="todo">À faire</button>
@@ -336,19 +367,20 @@
       <div class="stats">
         <div class="stat"><div class="v" id="ex-done">0</div><div class="k">Avec code</div></div>
         <div class="stat"><div class="v" id="ex-todo">0</div><div class="k">Sans code</div></div>
-        <div class="stat warn"><div class="v" id="ex-prob">0</div><div class="k">Problèmes</div></div>
+        <div class="stat warn"><div class="v" id="ex-prob">0</div><div class="k">À vérifier</div></div>
       </div>
       <div class="warnbox hidden" id="ex-dup"></div>
+      <div class="warnbox hidden" id="ex-noid"></div>
       <div class="setrow" style="border-bottom:none;padding-top:0">
-        <div class="t"><div class="n">Ajouter la date de scan</div><div class="d">Colonne <b>scanne_le</b> en plus (à décocher pour un ré-import Odoo propre)</div></div>
+        <div class="t"><div class="n">Ajouter la date de scan</div><div class="d">Colonne <b>scanne_le</b> (à décocher pour un ré-import Odoo propre)</div></div>
         <label class="switch"><input type="checkbox" id="ex-audit"><span class="sl"></span></label>
       </div>
       <p class="hint" id="ex-note" style="color:var(--muted);font-size:13px;margin:4px 0 0"></p>
     </div>
     <div class="sheet-foot">
-      <button class="btn primary" id="btn-export-csv">Fichier complet — CSV</button>
+      <button class="btn primary" id="btn-export-odoo">Ré-import Odoo (ID externe + barcode)</button>
       <button class="btn" id="btn-export-xlsx">Fichier complet — Excel (.xlsx)</button>
-      <button class="btn ghost" id="btn-export-odoo">Ré-import Odoo (clé + code-barres) — CSV</button>
+      <button class="btn ghost" id="btn-export-csv">Fichier complet — CSV</button>
       <button class="btn ghost" id="btn-copy">Copier le tableau</button>
     </div>
   </div>
@@ -360,11 +392,11 @@
     <div class="sheet-head"><h3>Réglages</h3><button class="iconbtn" data-close>✕</button></div>
     <div class="sheet-body">
       <div class="setrow">
-        <div class="t"><div class="n">Passer au suivant</div><div class="d">Aller au prochain article sans code après chaque scan</div></div>
+        <div class="t"><div class="n">Passer au suivant après un scan</div><div class="d">Désactivé = tu restes sur l'article (recommandé, évite les erreurs)</div></div>
         <label class="switch"><input type="checkbox" id="set-auto"><span class="sl"></span></label>
       </div>
       <div class="setrow">
-        <div class="t"><div class="n">Bip sonore</div><div class="d">Son à chaque scan réussi</div></div>
+        <div class="t"><div class="n">Bip sonore</div><div class="d">Son distinct : OK / doublon</div></div>
         <label class="switch"><input type="checkbox" id="set-sound"><span class="sl"></span></label>
       </div>
       <div class="setrow">
@@ -372,7 +404,7 @@
         <label class="switch"><input type="checkbox" id="set-vibrate"><span class="sl"></span></label>
       </div>
       <div class="setrow">
-        <div class="t"><div class="n">Séparateur CSV</div><div class="d">Point-virgule = compatible Excel FR</div></div>
+        <div class="t"><div class="n">Séparateur CSV</div><div class="d">Point-virgule = Excel FR</div></div>
         <select id="set-delim" style="width:auto;min-width:120px">
           <option value=";">Point-virgule ;</option>
           <option value=",">Virgule ,</option>
@@ -388,17 +420,22 @@
 
 <script>
 /* ============================================================
-   KOD·BAR — état, persistance, logique
+   KOD·BAR v3 — logique reconstruite
+   Principes : 1 code-barres = 1 article (unicité stricte),
+   saisie PDA robuste (capteur dédié), clé Odoo = ID externe.
    ============================================================ */
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
-const SESSION_KEY='kodbar_session_v2', SETTINGS_KEY='kodbar_settings_v1';
+const SESSION_KEY='kodbar_session_v3', SETTINGS_KEY='kodbar_settings_v2';
 
-let S=null, currentView='import', listFilter='all';
+let S=null, view='import', listFilter='all';
 let settings=loadSettings();
+let lastScan={code:'',t:0};        // anti double-déclenchement global
+let dupBoxTimer=null;
 
+/* ================= Réglages / persistance ================= */
 function loadSettings(){
-  const d={autoAdvance:true,sound:true,vibrate:true,csvDelim:';'};
+  const d={autoAdvance:false,sound:true,vibrate:true,csvDelim:';'};
   try{ return Object.assign(d, JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{}')); }catch(e){ return d; }
 }
 function saveSettings(){ try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }catch(e){} }
@@ -406,7 +443,11 @@ function saveState(){ if(!S) return; try{ localStorage.setItem(SESSION_KEY, JSON
 function loadSavedSession(){ try{ return JSON.parse(localStorage.getItem(SESSION_KEY)||'null'); }catch(e){ return null; } }
 function clearSavedSession(){ try{ localStorage.removeItem(SESSION_KEY); }catch(e){} }
 
-/* ================= Import ================= */
+/* ================= Normalisation code ================= */
+// supprime TOUT caractère de contrôle (\r \n \t + invisibles) et espaces bord
+function normalize(raw){ return String(raw==null?'':raw).replace(/[\u0000-\u001F\u007F]+/g,'').trim(); }
+
+/* ================= Import fichier ================= */
 async function handleFile(file){
   const name=(file.name||'').toLowerCase();
   try{
@@ -453,150 +494,273 @@ function buildPreview(rawRows, fileName){
   if(!records.length){ toast('Aucune ligne de données'); return; }
   pendingImport={headers,records,fileName};
 
-  const filled=col=> col? records.filter(r=>String(r[col]||'').trim()!=='').length : 0;
-
   $('#preview-meta').innerHTML =
-    `<span class="chip">📄 <b>${escapeHtml(fileName)}</b></span>`+
-    `<span class="chip"><b>${records.length}</b> articles</span>`+
-    `<span class="chip"><b>${headers.length}</b> colonnes</span>`;
+    '<span class="chip">📄 <b>'+escapeHtml(fileName)+'</b></span>'+
+    '<span class="chip"><b>'+records.length+'</b> articles</span>'+
+    '<span class="chip"><b>'+headers.length+'</b> colonnes</span>';
 
   const t=$('#preview-table');
-  t.innerHTML='<thead><tr>'+headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')+'</tr></thead><tbody>'+
-    records.slice(0,5).map(rec=>'<tr>'+headers.map(h=>`<td>${escapeHtml(rec[h])}</td>`).join('')+'</tr>').join('')+'</tbody>';
+  t.innerHTML='<thead><tr>'+headers.map(h=>'<th>'+escapeHtml(h)+'</th>').join('')+'</tr></thead><tbody>'+
+    records.slice(0,5).map(rec=>'<tr>'+headers.map(h=>'<td>'+escapeHtml(rec[h])+'</td>').join('')+'</tr>').join('')+'</tbody>';
 
-  const opts=(sel,none)=> (none?`<option value="">— aucune —</option>`:'')+
-    headers.map(h=>`<option value="${escapeAttr(h)}" ${h===sel?'selected':''}>${escapeHtml(h)}</option>`).join('');
+  const opts=(sel,none)=> (none?'<option value="">— aucune —</option>':'')+
+    headers.map(h=>'<option value="'+escapeAttr(h)+'" '+(h===sel?'selected':'')+'>'+escapeHtml(h)+'</option>').join('');
 
-  const gLabel=guess(headers,['design','désign','libell','name','nom','article','produit','descript','item']);
+  const gLabel=guess(headers,['name','nom','design','désign','libell','article','produit','descript','item']);
   const gVar  =guess(headers,['attribut','saveur','variante','arome','arôme','parfum','flav','gout','goût','pochon']);
   const gCode =guess(headers,['barcode','ean','gtin','code barre','code-barre','codebarre','upc','gencod']);
-  const gKey  =guess(headers,['default_code','reference','référence','sku','ref','code interne','id']);
+  const gId   =guessExact(headers,['id','external id','id externe','xml_id','external_id']) || guess(headers,['external','xml_id']);
+  const gKey  =guess(headers,['default_code','reference','référence','sku','ref','code interne']);
 
   $('#col-label').innerHTML  = opts(gLabel,false);
   $('#col-variant').innerHTML= opts(gVar,true);
   $('#col-code').innerHTML   = opts(gCode,true);
+  $('#col-id').innerHTML     = opts(gId,true);
   $('#col-key').innerHTML    = opts(gKey,true);
+
+  updateKeyWarn();
+  ['#col-id','#col-key'].forEach(sel=> $(sel).addEventListener('change', updateKeyWarn));
 
   $('#import-card').classList.add('hidden');
   $('#resume-card').classList.add('hidden');
   $('#config-card').classList.remove('hidden');
 }
-function guess(headers, keys){
-  for(const k of keys){ const f=headers.find(h=>h.toLowerCase().includes(k)); if(f) return f; }
-  return null;
+function guess(headers, keys){ for(const k of keys){ const f=headers.find(h=>h.toLowerCase().includes(k)); if(f) return f; } return null; }
+function guessExact(headers, keys){ for(const k of keys){ const f=headers.find(h=>h.toLowerCase().trim()===k); if(f) return f; } return null; }
+
+// prévient si la clé choisie a des doublons dans le fichier
+function updateKeyWarn(){
+  if(!pendingImport) return;
+  const idc=$('#col-id').value, keyc=$('#col-key').value;
+  const box=$('#cfg-keywarn'); const msgs=[];
+  const dupOf=(col)=>{ if(!col) return null; const m={}; pendingImport.records.forEach(r=>{ const v=String(r[col]||'').trim(); if(v) m[v]=(m[v]||0)+1; }); const d=Object.entries(m).filter(([,n])=>n>1); return d; };
+  if(idc){ const empty=pendingImport.records.filter(r=>!String(r[idc]||'').trim()).length; if(empty) msgs.push(empty+' article(s) sans ID externe — ils sortiront dans le fichier complet mais pas dans l\'export Odoo.'); const d=dupOf(idc); if(d&&d.length) msgs.push('⚠ ID externe en double : '+d.slice(0,4).map(x=>x[0]).join(', ')+(d.length>4?'…':'')); }
+  if(keyc){ const d=dupOf(keyc); if(d&&d.length) msgs.push('La référence « '+keyc+' » a '+d.length+' doublon(s) — ne pas l\'utiliser comme clé Odoo.'); }
+  if(msgs.length){ box.innerHTML=msgs.map(escapeHtml).join('<br>'); box.classList.remove('hidden'); } else box.classList.add('hidden');
 }
 
 function startSession(){
   if(!pendingImport) return;
-  const labelCol=$('#col-label').value;
-  const variantCol=$('#col-variant').value;
-  const codeCol=$('#col-code').value;
-  const keyCol=$('#col-key').value;
   S={
     fileName:pendingImport.fileName, headers:pendingImport.headers,
-    labelCol, variantCol, codeCol, keyCol,
-    rows: pendingImport.records.map(rec=>{
-      const existing = codeCol ? String(rec[codeCol]||'').trim() : '';
-      return { data:rec, code:existing, at: existing?0:null }; // at=0 => code d'origine (non scanné aujourd'hui)
+    labelCol:$('#col-label').value, variantCol:$('#col-variant').value,
+    codeCol:$('#col-code').value, idCol:$('#col-id').value, keyCol:$('#col-key').value,
+    products: pendingImport.records.map((rec,ix)=>{
+      const existing = $('#col-code').value ? normalize(rec[$('#col-code').value]) : '';
+      return { id:'P'+ix, data:rec, code:existing, at: existing?0:null };
     }),
-    i:0, createdAt:Date.now()
+    cur:0, createdAt:Date.now()
   };
-  const firstTodo=S.rows.findIndex(r=>!r.code);
-  S.i = firstTodo===-1?0:firstTodo;
+  const firstTodo=S.products.findIndex(p=>!p.code);
+  S.cur = firstTodo===-1?0:firstTodo;
   saveState(); goScan();
 }
 
-/* ================= Navigation ================= */
-function goImport(){ currentView='import'; stopCamera(); $('#screen-import').classList.remove('hidden'); $('#screen-scan').classList.add('hidden'); $('#navbar').classList.add('hidden'); $('#top-actions').style.display='none'; refreshResume(); }
-function goScan(){ currentView='scan'; $('#screen-import').classList.add('hidden'); $('#screen-scan').classList.remove('hidden'); $('#navbar').classList.remove('hidden'); $('#top-actions').style.display='flex'; renderScan(); }
+/* ================= Navigation d'écrans ================= */
+function goImport(){ view='import'; stopCamera(); $('#screen-import').classList.remove('hidden'); $('#screen-scan').classList.add('hidden'); $('#navbar').classList.add('hidden'); $('#top-actions').style.display='none'; refreshResume(); }
+function goScan(){ view='scan'; $('#screen-import').classList.add('hidden'); $('#screen-scan').classList.remove('hidden'); $('#navbar').classList.remove('hidden'); $('#top-actions').style.display='flex'; render(); armSink(); }
 function refreshResume(){
   const sv=loadSavedSession();
-  if(sv&&sv.rows&&sv.rows.length){
-    const done=sv.rows.filter(r=>r.code).length;
-    $('#resume-sub').textContent=`${sv.fileName||'liste'} — ${done}/${sv.rows.length} avec code`;
+  if(sv&&sv.products&&sv.products.length){
+    const done=sv.products.filter(p=>p.code).length;
+    $('#resume-sub').textContent=(sv.fileName||'liste')+' — '+done+'/'+sv.products.length+' avec code';
     $('#resume-card').classList.remove('hidden'); $('#import-card').classList.remove('hidden'); $('#config-card').classList.add('hidden');
   } else { $('#resume-card').classList.add('hidden'); $('#import-card').classList.remove('hidden'); $('#config-card').classList.add('hidden'); }
 }
 
-/* ================= Rendu scan ================= */
-function renderScan(){
+/* ================= Rendu écran scan ================= */
+function cur(){ return S.products[S.cur]; }
+function plabel(p){ return p.data[S.labelCol]||'(vide)'; }
+function pvariant(p){ return S.variantCol?(p.data[S.variantCol]||''):''; }
+
+function render(){
   if(!S) return;
-  const total=S.rows.length, done=S.rows.filter(r=>r.code).length, pct=total?Math.round(done/total*100):0;
-  $('#prog-label').innerHTML=`<b>${done}</b> sur ${total} avec code`;
+  const total=S.products.length, done=S.products.filter(p=>p.code).length, pct=total?Math.round(done/total*100):0;
+  $('#prog-label').innerHTML='<b>'+done+'</b> sur '+total+' avec code';
   $('#prog-pct').textContent=pct+'%';
   $('#prog-bar').style.width=pct+'%';
   const dot=$('#list-count'), todo=total-done;
   if(todo>0){ dot.textContent=todo; dot.classList.remove('hidden'); } else dot.classList.add('hidden');
 
-  const r=S.rows[S.i];
-  $('#p-pos').textContent=`${S.i+1} / ${total}`;
-  $('#p-label').textContent=r.data[S.labelCol]||'(vide)';
-  $('#p-variant').textContent = S.variantCol ? (r.data[S.variantCol]||'') : '';
+  const p=cur();
+  $('#p-pos').textContent=(S.cur+1)+' / '+total;
+  $('#p-label').textContent=plabel(p);
+  $('#p-variant').textContent=pvariant(p);
 
-  // chips contexte : clé (SKU)
   const ctx=$('#p-ctx'); ctx.innerHTML='';
-  if(S.keyCol && String(r.data[S.keyCol]||'').trim()) ctx.insertAdjacentHTML('beforeend',`<span class="k">${escapeHtml(r.data[S.keyCol])}</span>`);
+  if(S.keyCol && String(p.data[S.keyCol]||'').trim()) ctx.insertAdjacentHTML('beforeend','<span class="k">'+escapeHtml(p.data[S.keyCol])+'</span>');
+  if(S.idCol && String(p.data[S.idCol]||'').trim()) ctx.insertAdjacentHTML('beforeend','<span class="k" style="color:var(--muted-2)">id ✓</span>');
 
-  // détails = autres colonnes non vides
-  const skip=new Set([S.labelCol,S.variantCol,S.codeCol,S.keyCol].filter(Boolean));
-  const others=S.headers.filter(h=>!skip.has(h) && String(r.data[h]||'').trim()!=='');
-  $('#p-details').innerHTML = others.map(h=>`<div>${escapeHtml(h)} : <span>${escapeHtml(r.data[h])}</span></div>`).join('') || '<div style="color:var(--muted-2)">Aucune autre info</div>';
+  const skip=new Set([S.labelCol,S.variantCol,S.codeCol,S.keyCol,S.idCol].filter(Boolean));
+  const others=S.headers.filter(h=>!skip.has(h) && String(p.data[h]||'').trim()!=='');
+  $('#p-details').innerHTML = others.map(h=>'<div>'+escapeHtml(h)+' : <span>'+escapeHtml(p.data[h])+'</span></div>').join('') || '<div style="color:var(--muted-2)">Aucune autre info</div>';
 
   const box=$('#p-codebox'), badges=$('#p-badges');
-  if(r.code){
-    box.className='code-box';
-    box.innerHTML=`<span class="num">${escapeHtml(r.code)}</span><button class="mini" id="btn-clear-code" title="Effacer">✕</button>`;
-    $('#btn-clear-code').onclick=()=>{ r.code=''; r.at=null; saveState(); renderScan(); };
-    badges.innerHTML='';
-    const fmt=guessFormat(r.code); if(fmt) badges.insertAdjacentHTML('beforeend',`<span class="badge fmt">${fmt}</span>`);
-    if(r.at===0) badges.insertAdjacentHTML('beforeend',`<span class="badge fmt">déjà présent</span>`);
-    const chk=eanChecksum(r.code);
-    if(chk===true) badges.insertAdjacentHTML('beforeend',`<span class="badge good">✓ clé valide</span>`);
-    else if(chk===false) badges.insertAdjacentHTML('beforeend',`<span class="badge warn">⚠ clé invalide</span>`);
-    if(r.code.length>18) badges.insertAdjacentHTML('beforeend',`<span class="badge warn">⚠ trop long (${r.code.length})</span>`);
-    const dup=duplicatesOf(r.code,S.i);
-    if(dup.length){ badges.insertAdjacentHTML('beforeend',`<span class="badge dup" id="dup-badge">⚠ doublon (${dup.length})</span>`);
-      $('#dup-badge').onclick=()=>{ openList(); $('#list-search').value=r.code; renderList(); }; }
-  } else { box.className='code-box empty'; box.innerHTML=`<span class="num">non scanné</span>`; badges.innerHTML=''; }
+  badges.innerHTML='';
+  if(p.code){
+    box.className='code-box filled';
+    box.innerHTML='<span class="num ok">'+escapeHtml(p.code)+'</span><button class="mini" id="btn-clear-code" title="Effacer">✕</button>';
+    $('#btn-clear-code').onclick=()=>{ p.code=''; p.at=null; saveState(); render(); armSink(); };
+    const fmt=guessFormat(p.code); if(fmt) badges.insertAdjacentHTML('beforeend','<span class="badge fmt">'+fmt+'</span>');
+    if(p.at===0) badges.insertAdjacentHTML('beforeend','<span class="badge fmt">code d\'origine</span>');
+    const chk=eanChecksum(p.code);
+    if(chk===true) badges.insertAdjacentHTML('beforeend','<span class="badge good">✓ clé EAN valide</span>');
+    else if(chk===false) badges.insertAdjacentHTML('beforeend','<span class="badge warn">⚠ clé EAN invalide</span>');
+  } else {
+    box.className='code-box empty'; box.innerHTML='<span class="num">non scanné</span>';
+  }
   saveState();
 }
 
-function goPrev(){ if(!S) return; S.i=(S.i-1+S.rows.length)%S.rows.length; renderScan(); }
-function goNext(){ if(!S) return; S.i=(S.i+1)%S.rows.length; renderScan(); }
+function goPrev(){ if(!S) return; S.cur=(S.cur-1+S.products.length)%S.products.length; render(); armSink(); }
+function goNext(){ if(!S) return; S.cur=(S.cur+1)%S.products.length; render(); armSink(); }
 function goNextTodo(){
-  if(!S) return; const n=S.rows.length;
-  for(let k=1;k<=n;k++){ const idx=(S.i+k)%n; if(!S.rows[idx].code){ S.i=idx; renderScan(); return; } }
-  toast('Tous les articles ont un code ✓'); renderScan();
+  if(!S) return; const n=S.products.length;
+  for(let k=1;k<=n;k++){ const idx=(S.cur+k)%n; if(!S.products[idx].code){ S.cur=idx; render(); armSink(); return; } }
+  toast('Tous les articles ont un code ✓'); render(); armSink();
 }
 
-/* ================= Attribution ================= */
-function assignCode(code, source){
-  if(!S) return; code=String(code||'').trim(); if(!code) return;
-  const r=S.rows[S.i]; const dup=duplicatesOf(code,S.i);
-  r.code=code; r.at=Date.now(); saveState();
-  if(dup.length){ flash('dup'); beep('warn'); vibrate([40,50,40]); toast('⚠ Ce code est déjà attribué ailleurs'); }
-  else { flash('ok'); beep('ok'); vibrate(60); }
-  renderScan();
-  if(settings.autoAdvance && !dup.length) setTimeout(()=>{ if(currentView==='scan') goNextTodo(); }, 650);
+/* ================= Attribution (cœur anti-doublon) ================= */
+function ownerOf(code){ return S.products.find(x=> x.id!==cur().id && x.code===code) || null; }
+
+function assign(raw){
+  if(!S || view!=='scan') return;
+  const code=normalize(raw);
+  if(code.length<2) return;
+  // anti double-déclenchement : même code < 1500 ms => ignoré
+  const now=Date.now();
+  if(code===lastScan.code && now-lastScan.t<1500){ return; }
+  lastScan={code,t:now};
+
+  const p=cur();
+  const owner=ownerOf(code);
+  if(owner){
+    // RÈGLE : 1 code = 1 boîte -> refus strict
+    feedback('dup');
+    showBox('dup', code);
+    toast('⛔ Doublon — ce code est déjà sur « '+plabel(owner)+' »');
+    return;
+  }
+  if(p.code===code){
+    feedback('info');
+    toast('Déjà enregistré pour cet article ✓');
+    return;
+  }
+  const replaced=p.code;
+  p.code=code; p.at=now; saveState();
+  feedback('ok');
+  render();
+  toast(replaced ? ('Code remplacé (était '+replaced+')') : 'Code enregistré ✓');
+  if(settings.autoAdvance) setTimeout(()=>{ if(view==='scan') goNextTodo(); }, 550);
 }
-function duplicatesOf(code, exceptIdx){ const out=[]; S.rows.forEach((r,idx)=>{ if(idx!==exceptIdx && r.code && r.code===code) out.push(idx); }); return out; }
+
+// affichage transitoire d'un refus de doublon dans la code-box
+function showBox(kind, code){
+  const box=$('#p-codebox');
+  clearTimeout(dupBoxTimer);
+  if(kind==='dup'){
+    box.className='code-box dup';
+    box.innerHTML='<span class="num bad">'+escapeHtml(code)+'</span>';
+    dupBoxTimer=setTimeout(render, 1400);
+  }
+}
 
 /* ================= Feedback ================= */
-function flash(type){ const f=$('#flash'); f.className='flash on'+(type==='dup'?' dup':''); setTimeout(()=>f.className='flash',180); }
+function feedback(type){ flash(type); beep(type); vibrate(type==='dup'?[60,60,60]:(type==='ok'?60:25)); }
+function flash(type){ const f=$('#flash'); f.className='flash on'+(type==='dup'?' dup':(type==='info'?' info':'')); setTimeout(()=>f.className='flash',180); }
 let audioCtx=null;
 function beep(type){
   if(!settings.sound) return;
   try{
     audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
     if(audioCtx.state==='suspended') audioCtx.resume();
-    const o=audioCtx.createOscillator(),g=audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination);
-    o.frequency.value= type==='ok'?900 : type==='warn'?480 : 240; o.type='square';
-    const t=audioCtx.currentTime;
-    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.25,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+0.14);
-    o.start(t); o.stop(t+0.15);
+    if(type==='dup'){ tone(240,0.10); setTimeout(()=>tone(200,0.12),110); }
+    else if(type==='info'){ tone(600,0.08); }
+    else { tone(920,0.12); }
   }catch(e){}
 }
+function tone(freq,dur){
+  const o=audioCtx.createOscillator(),g=audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination);
+  o.frequency.value=freq; o.type='square';
+  const t=audioCtx.currentTime;
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.22,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.start(t); o.stop(t+dur+0.02);
+}
 function vibrate(p){ if(settings.vibrate && navigator.vibrate) try{ navigator.vibrate(p); }catch(e){} }
+
+/* ================= Capteur PDA / douchette ================= */
+const sink=$('#sink');
+let sinkIdle=null;
+function anyModal(){ return !!document.querySelector('.modal.show'); }
+function armSink(){
+  if(view!=='scan' || anyModal()) { setStatus(false); return; }
+  if(document.activeElement===$('#manual-input')) { setStatus(false); return; }
+  try{ sink.focus({preventScroll:true}); }catch(e){}
+  setStatus(true);
+}
+function setStatus(on){
+  const el=$('#scan-status');
+  el.classList.toggle('armed', !!on);
+  $('#scan-status-txt').textContent = on ? 'Scanner PDA prêt — gâchette pour scanner' : 'Scanner en pause (champ actif)';
+}
+function flushSink(){
+  clearTimeout(sinkIdle);
+  const v=sink.value; sink.value='';
+  if(v && normalize(v).length>=2) assign(v);
+  armSink();
+}
+sink.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); flushSink(); } });
+sink.addEventListener('input', ()=>{ clearTimeout(sinkIdle); sinkIdle=setTimeout(flushSink, 120); }); // secours si suffixe ≠ Entrée
+sink.addEventListener('blur', ()=>{ setTimeout(()=>{ if(view==='scan' && !anyModal() && document.activeElement!==$('#manual-input')) armSink(); }, 40); });
+
+// filets de re-focalisation
+window.addEventListener('focus', armSink);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) armSink(); });
+document.addEventListener('keydown', e=>{
+  if(view!=='scan' || anyModal()) return;
+  const ae=document.activeElement;
+  if(ae===sink || ae===$('#manual-input')) return;
+  if(ae && /^(input|textarea|select|button|a)$/i.test(ae.tagName)) return;
+  armSink(); // un scan arrive alors que le focus a filé -> on ré-arme
+});
+
+/* ================= Caméra (secours) ================= */
+const Scanner={
+  video:null,stream:null,detector:null,timer:null,zxing:null,running:false,last:{code:'',t:0},
+  uiLive(){ camMsg(''); $('#cam-placeholder').style.display='none'; $('#reticle').classList.add('on'); $('#btn-cam-stop').style.display='block'; },
+  async start(){
+    this.video=$('#video'); const hasNative=('BarcodeDetector' in window);
+    try{
+      if(hasNative){
+        this.stream=await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:'environment' } }, audio:false });
+        this.video.srcObject=this.stream; await this.video.play();
+        const supported=await BarcodeDetector.getSupportedFormats();
+        const want=['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','itf','codabar','qr_code','data_matrix'];
+        const formats=want.filter(f=>supported.includes(f));
+        this.detector=new BarcodeDetector(formats.length?{formats}:undefined);
+        this.uiLive(); this.running=true; this.loopNative();
+      } else { await this.startZxing(); this.uiLive(); this.running=true; }
+    }catch(err){
+      console.error(err); this.running=false; $('#reticle').classList.remove('on');
+      if(err&&(err.name==='NotAllowedError'||err.name==='SecurityError')) camMsg('Accès caméra refusé. Le PDA / la saisie manuelle restent disponibles.');
+      else if(err&&err.name==='NotFoundError') camMsg('Aucune caméra détectée.');
+      else camMsg('Caméra indisponible ici (HTTPS requis).');
+    }
+  },
+  loopNative(){ this.timer=setInterval(async()=>{ if(!this.running||!this.detector) return; try{ const c=await this.detector.detect(this.video); if(c&&c.length) this.handle(c[0].rawValue); }catch(e){} },220); },
+  async startZxing(){
+    try{
+      await ensureZXing(); this.zxing=new ZXing.BrowserMultiFormatReader();
+      const cb=(res)=>{ if(res) this.handle(res.getText()); };
+      if(typeof this.zxing.decodeFromConstraints==='function') await this.zxing.decodeFromConstraints({video:{facingMode:'environment'}}, this.video, cb);
+      else await this.zxing.decodeFromVideoDevice(undefined, this.video, cb);
+    }catch(e){ console.error(e); camMsg('Lecteur caméra indisponible.'); }
+  },
+  handle(code){ code=normalize(code); if(!code) return; const now=Date.now(); if(code===this.last.code && now-this.last.t<1600) return; this.last={code,t:now}; assign(code); },
+  stop(){ this.running=false; if(this.timer){clearInterval(this.timer);this.timer=null;} if(this.zxing){try{this.zxing.reset();}catch(e){}this.zxing=null;} if(this.stream){this.stream.getTracks().forEach(t=>t.stop());this.stream=null;} if(this.video)this.video.srcObject=null; this.detector=null; this.last={code:'',t:0}; $('#reticle').classList.remove('on'); $('#cam-placeholder').style.display='flex'; $('#btn-cam-stop').style.display='none'; }
+};
+function stopCamera(){ Scanner.stop(); }
+function camMsg(m){ const el=$('#cam-msg'); if(m){ el.textContent=m; el.classList.add('show'); } else el.classList.remove('show'); }
 
 /* ================= Format & checksum ================= */
 function guessFormat(code){
@@ -614,112 +778,80 @@ function eanChecksum(code){
   d.reverse().forEach((n,idx)=> sum+= n*(idx%2===0?3:1));
   return ((10-(sum%10))%10)===check;
 }
-function isProblem(idx, dupMap){
-  const r=S.rows[idx]; if(!r.code) return false;
-  if((dupMap[r.code]||0)>1) return true;
-  if(eanChecksum(r.code)===false) return true;
-  if(r.code.length>18 || r.code.length<6) return true;
+function isProblem(p, dupMap){
+  if(!p.code) return false;
+  if((dupMap[p.code]||0)>1) return true;      // ne devrait plus arriver (unicité) mais on garde le contrôle
+  if(eanChecksum(p.code)===false) return true;
+  if(p.code.length>18 || p.code.length<6) return true;
   return false;
 }
-function dupCounts(){ const m={}; S.rows.forEach(r=>{ if(r.code) m[r.code]=(m[r.code]||0)+1; }); return m; }
+function dupCounts(){ const m={}; S.products.forEach(p=>{ if(p.code) m[p.code]=(m[p.code]||0)+1; }); return m; }
 
-/* ================= Caméra ================= */
-const Scanner={
-  video:null,stream:null,detector:null,timer:null,zxing:null,running:false,last:{code:'',t:0},
-  uiLive(){ camMsg(''); $('#cam-placeholder').style.display='none'; $('#reticle').classList.add('on'); $('#btn-cam-stop').style.display='block'; },
-  async start(){
-    this.video=$('#video'); const hasNative=('BarcodeDetector' in window);
-    try{
-      if(hasNative){
-        this.stream=await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:'environment' } }, audio:false });
-        this.video.srcObject=this.stream; await this.video.play();
-        const supported=await BarcodeDetector.getSupportedFormats();
-        const want=['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','itf','codabar','qr_code','data_matrix'];
-        const formats=want.filter(f=>supported.includes(f));
-        this.detector=new BarcodeDetector(formats.length?{formats}:undefined);
-        this.uiLive(); this.running=true; this.loopNative();
-      } else {
-        await this.startZxing(); this.uiLive(); this.running=true;
-      }
-    }catch(err){
-      console.error(err); this.running=false; $('#reticle').classList.remove('on');
-      if(err&&(err.name==='NotAllowedError'||err.name==='SecurityError')) camMsg('Accès caméra refusé. Autorise la caméra, ou héberge la page en HTTPS. La saisie manuelle / douchette reste disponible.');
-      else if(err&&err.name==='NotFoundError') camMsg('Aucune caméra détectée. Utilise la saisie manuelle ou une douchette.');
-      else camMsg('Caméra indisponible ici (l’accès caméra exige HTTPS). Saisie manuelle / douchette disponibles.');
-    }
-  },
-  loopNative(){ this.timer=setInterval(async()=>{ if(!this.running||!this.detector) return; try{ const c=await this.detector.detect(this.video); if(c&&c.length) this.handle(c[0].rawValue); }catch(e){} },220); },
-  async startZxing(){
-    try{
-      await ensureZXing(); this.zxing=new ZXing.BrowserMultiFormatReader();
-      const cb=(res)=>{ if(res) this.handle(res.getText()); };
-      if(typeof this.zxing.decodeFromConstraints==='function') await this.zxing.decodeFromConstraints({video:{facingMode:'environment'}}, this.video, cb);
-      else await this.zxing.decodeFromVideoDevice(undefined, this.video, cb);
-    }catch(e){ console.error(e); camMsg('Lecteur de code-barres indisponible. Saisie manuelle / douchette disponibles.'); }
-  },
-  handle(code){ code=String(code||'').trim(); if(!code) return; const now=Date.now(); if(code===this.last.code && now-this.last.t<1600) return; this.last={code,t:now}; assignCode(code,'camera'); },
-  stop(){ this.running=false; if(this.timer){clearInterval(this.timer);this.timer=null;} if(this.zxing){try{this.zxing.reset();}catch(e){}this.zxing=null;} if(this.stream){this.stream.getTracks().forEach(t=>t.stop());this.stream=null;} if(this.video)this.video.srcObject=null; this.detector=null; this.last={code:'',t:0}; $('#reticle').classList.remove('on'); $('#cam-placeholder').style.display='flex'; $('#btn-cam-stop').style.display='none'; }
-};
-function stopCamera(){ Scanner.stop(); }
-function camMsg(m){ const el=$('#cam-msg'); if(m){ el.textContent=m; el.classList.add('show'); } else el.classList.remove('show'); }
-
-/* Douchette hors champ de saisie */
-let gunBuf='',gunT=0;
-document.addEventListener('keydown', e=>{
-  if(currentView!=='scan') return;
-  const tag=(e.target.tagName||'').toLowerCase(); if(tag==='input'||tag==='textarea'||tag==='select') return;
-  const now=Date.now(); if(now-gunT>120) gunBuf=''; gunT=now;
-  if(e.key==='Enter'){ if(gunBuf.length>=3) assignCode(gunBuf.trim(),'gun'); gunBuf=''; return; }
-  if(e.key.length===1) gunBuf+=e.key;
-});
-
-/* ================= Liste ================= */
-function openList(){ renderList(); $('#modal-list').classList.add('show'); }
+/* ================= Liste / recherche ================= */
+function openList(){ armSinkPause(); renderList(); $('#modal-list').classList.add('show'); setTimeout(()=>{ const s=$('#list-search'); if(s) s.focus(); },50); }
+function armSinkPause(){ try{ sink.blur(); }catch(e){} setStatus(false); }
 function renderList(){
   if(!S) return;
-  const q=($('#list-search').value||'').toLowerCase().trim();
+  const q=normalize(($('#list-search').value||'')).toLowerCase();
   const dm=dupCounts();
   const body=$('#list-body'); body.innerHTML='';
-  S.rows.forEach((r,idx)=>{
-    const done=!!r.code, prob=isProblem(idx,dm);
+  let shown=0;
+  S.products.forEach((p,idx)=>{
+    const done=!!p.code, prob=isProblem(p,dm);
     if(listFilter==='todo'&&done) return;
     if(listFilter==='done'&&!done) return;
     if(listFilter==='problem'&&!prob) return;
-    const label=r.data[S.labelCol]||'(vide)';
-    const variant=S.variantCol?(r.data[S.variantCol]||''):'';
-    if(q && !(label.toLowerCase().includes(q)||variant.toLowerCase().includes(q)||(r.code||'').toLowerCase().includes(q))) return;
+    const label=plabel(p), variant=pvariant(p), sku=S.keyCol?(p.data[S.keyCol]||''):'';
+    if(q && !(label.toLowerCase().includes(q)||variant.toLowerCase().includes(q)||String(sku).toLowerCase().includes(q)||(p.code||'').toLowerCase().includes(q))) return;
     const st = prob?'prob':(done?'done':'todo');
     const ic = prob?'⚠':(done?'✓':'•');
-    const el=document.createElement('div'); el.className='list-item'+(idx===S.i?' cur':'');
-    el.innerHTML=`<div class="st ${st}">${ic}</div><div class="txt"><div class="n">${escapeHtml(label)}</div>`+
-      (variant?`<div class="v">${escapeHtml(variant)}</div>`:'')+
-      (done?`<div class="c">${escapeHtml(r.code)}</div>`:`<div class="c" style="color:var(--muted-2)">à scanner</div>`)+`</div>`;
-    el.onclick=()=>{ S.i=idx; $('#modal-list').classList.remove('show'); renderScan(); };
-    body.appendChild(el);
+    const el=document.createElement('div'); el.className='list-item'+(idx===S.cur?' cur':'');
+    el.innerHTML='<div class="st '+st+'">'+ic+'</div><div class="txt"><div class="n">'+escapeHtml(label)+(sku?' <span style="color:var(--muted-2);font-size:12px;font-family:var(--font-mono)">'+escapeHtml(sku)+'</span>':'')+'</div>'+
+      (variant?'<div class="v">'+escapeHtml(variant)+'</div>':'')+
+      (done?'<div class="c">'+escapeHtml(p.code)+'</div>':'<div class="c" style="color:var(--muted-2)">à scanner</div>')+'</div>';
+    el.onclick=()=>{ S.cur=idx; $('#modal-list').classList.remove('show'); render(); armSink(); };
+    body.appendChild(el); shown++;
   });
-  if(!body.children.length) body.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px">Aucun article</p>';
+  if(!shown) body.innerHTML='<p style="color:var(--muted);text-align:center;padding:20px">Aucun article</p>';
 }
 
 /* ================= Export ================= */
 function openExport(){
-  if(!S) return;
-  const done=S.rows.filter(r=>r.code).length; const dm=dupCounts();
-  let prob=0; S.rows.forEach((r,idx)=>{ if(isProblem(idx,dm)) prob++; });
-  $('#ex-done').textContent=done; $('#ex-todo').textContent=S.rows.length-done; $('#ex-prob').textContent=prob;
-  // note colonne cible
+  if(!S) return; armSinkPause();
+  const done=S.products.filter(p=>p.code).length; const dm=dupCounts();
+  let prob=0; S.products.forEach(p=>{ if(isProblem(p,dm)) prob++; });
+  $('#ex-done').textContent=done; $('#ex-todo').textContent=S.products.length-done; $('#ex-prob').textContent=prob;
+
   const note = S.codeCol
-    ? `Le fichier ressort avec toutes tes colonnes ; la colonne « ${S.codeCol} » est complétée en place (codes d'origine conservés + nouveaux scans).`
-    : `Le fichier ressort avec toutes tes colonnes + une colonne « code_barre ».`;
+    ? 'Le fichier ressort avec toutes tes colonnes ; « '+S.codeCol+' » est complétée en place.'
+    : 'Le fichier ressort avec toutes tes colonnes + une colonne « code_barre ».';
   $('#ex-note').textContent=note;
-  $('#btn-export-odoo').style.display = S.keyCol ? '' : 'none';
-  // doublons/problèmes détaillés
-  const map={}; S.rows.forEach(r=>{ if(r.code){ (map[r.code]=map[r.code]||[]).push(r.data[S.labelCol]||''); } });
+
+  // doublons de code (ne devrait plus arriver, mais affichage de contrôle)
+  const map={}; S.products.forEach(p=>{ if(p.code){ (map[p.code]=map[p.code]||[]).push(plabel(p)); } });
   const dups=Object.entries(map).filter(([,v])=>v.length>1);
-  const box=$('#ex-dup');
-  if(dups.length){ box.classList.remove('hidden');
-    box.innerHTML=`<div class="wt">⚠ ${dups.length} code(s) en doublon</div><ul>`+
-      dups.slice(0,8).map(([c,v])=>`<li><b>${escapeHtml(c)}</b> — ${v.map(escapeHtml).join(', ')}</li>`).join('')+(dups.length>8?`<li>…</li>`:'')+`</ul>`;
-  } else box.classList.add('hidden');
+  const dbox=$('#ex-dup');
+  if(dups.length){ dbox.classList.remove('hidden');
+    dbox.innerHTML='<div class="wt">⚠ '+dups.length+' code(s) sur plusieurs articles</div><ul>'+
+      dups.slice(0,8).map(([c,v])=>'<li><b>'+escapeHtml(c)+'</b> — '+v.map(escapeHtml).join(', ')+'</li>').join('')+(dups.length>8?'<li>…</li>':'')+'</ul>';
+  } else dbox.classList.add('hidden');
+
+  // articles avec code mais sans ID externe -> exclus de l'export Odoo
+  const nbox=$('#ex-noid');
+  if(S.idCol){
+    const noid=S.products.filter(p=>p.code && !String(p.data[S.idCol]||'').trim());
+    $('#btn-export-odoo').disabled=false;
+    if(noid.length){ nbox.classList.remove('hidden');
+      nbox.innerHTML='<div class="wt">ℹ '+noid.length+' article(s) scanné(s) sans ID externe</div><ul>'+
+        noid.slice(0,6).map(p=>'<li>'+escapeHtml(plabel(p))+(pvariant(p)?' — '+escapeHtml(pvariant(p)):'')+'</li>').join('')+(noid.length>6?'<li>…</li>':'')+
+        '</ul><div style="color:var(--muted);margin-top:6px">À compléter à la main dans Odoo (ou via le fichier complet).</div>';
+    } else nbox.classList.add('hidden');
+  } else {
+    nbox.classList.remove('hidden');
+    nbox.innerHTML='<div class="wt">⚠ Aucune colonne ID externe choisie</div><div style="color:var(--muted);margin-top:4px">L\'export Odoo utilisera la référence interne — risqué si elle a des doublons. Reviens à la config pour choisir la colonne « id ».</div>';
+    $('#btn-export-odoo').disabled=false;
+  }
+
   $('#modal-export').classList.add('show');
 }
 function fmtDate(t){ return (t&&t>0)? new Date(t).toLocaleString('fr-FR') : ''; }
@@ -728,18 +860,18 @@ function buildMatrix(){
   let headers, rows;
   if(S.codeCol){
     headers=[...S.headers]; if(audit) headers=[...headers,'scanne_le'];
-    rows=S.rows.map(r=>{ const line=S.headers.map(h=> h===S.codeCol?(r.code||''):(r.data[h]!=null?r.data[h]:'')); if(audit) line.push(fmtDate(r.at)); return line; });
+    rows=S.products.map(p=>{ const line=S.headers.map(h=> h===S.codeCol?(p.code||''):(p.data[h]!=null?p.data[h]:'')); if(audit) line.push(fmtDate(p.at)); return line; });
   } else {
     headers=[...S.headers,'code_barre']; if(audit) headers.push('scanne_le');
-    rows=S.rows.map(r=>{ const line=[...S.headers.map(h=> r.data[h]!=null?r.data[h]:''), r.code||'']; if(audit) line.push(fmtDate(r.at)); return line; });
+    rows=S.products.map(p=>{ const line=[...S.headers.map(h=> p.data[h]!=null?p.data[h]:''), p.code||'']; if(audit) line.push(fmtDate(p.at)); return line; });
   }
   return {headers,rows};
 }
 function buildOdoo(){
-  const key=S.keyCol||S.headers[0];
+  const key=S.idCol||S.keyCol||S.headers[0];
   const headers=[key,'barcode'];
-  const rows=S.rows.filter(r=>r.code).map(r=>[ r.data[key]!=null?r.data[key]:'', r.code ]);
-  return {headers,rows};
+  const rows=S.products.filter(p=>p.code && String(p.data[key]||'').trim()).map(p=>[ p.data[key], p.code ]);
+  return {headers,rows,key};
 }
 function baseName(){ return (S.fileName||'articles').replace(/\.[^.]+$/,''); }
 function toCSV(headers,rows){
@@ -752,7 +884,7 @@ async function exportXLSX(){
   try{ await ensureXLSX(); const {headers,rows}=buildMatrix(); const ws=XLSX.utils.aoa_to_sheet([headers,...rows]); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Codes'); XLSX.writeFile(wb, baseName()+'_codes.xlsx'); toast('Excel exporté'); }
   catch(e){ console.error(e); toast('Export Excel indisponible (réseau ?). Utilise le CSV.'); }
 }
-function exportOdoo(){ const {headers,rows}=buildOdoo(); if(!rows.length){ toast('Aucun code à exporter'); return; } download(baseName()+'_odoo_barcode.csv', new Blob([toCSV(headers,rows)],{type:'text/csv;charset=utf-8'})); toast('Fichier Odoo exporté'); }
+function exportOdoo(){ const {headers,rows,key}=buildOdoo(); if(!rows.length){ toast('Aucun code exportable (clé '+key+' vide)'); return; } download(baseName()+'_odoo_barcode.csv', new Blob([toCSV(headers,rows)],{type:'text/csv;charset=utf-8'})); toast(rows.length+' lignes → Odoo ('+key+')'); }
 function copyMatrix(){ const {headers,rows}=buildMatrix(); const txt=[headers,...rows].map(r=>r.map(v=>String(v==null?'':v)).join('\t')).join('\n'); navigator.clipboard.writeText(txt).then(()=>toast('Tableau copié'),()=>toast('Copie impossible')); }
 function download(name, blob){ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},800); }
 
@@ -764,7 +896,7 @@ let _zxing=null; async function ensureZXing(){ if(window.ZXing) return; if(!_zxi
 /* ================= Utils ================= */
 function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escapeAttr(s){ return escapeHtml(s); }
-let toastT=null; function toast(msg){ const el=$('#toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),2200); }
+let toastT=null; function toast(msg){ const el=$('#toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),2400); }
 
 /* ================= Init ================= */
 function init(){
@@ -776,30 +908,35 @@ function init(){
 
   $('#btn-cancel-config').onclick=()=>{ pendingImport=null; $('#config-card').classList.add('hidden'); $('#import-card').classList.remove('hidden'); refreshResume(); };
   $('#btn-start').onclick=startSession;
-  $('#btn-resume').onclick=()=>{ const sv=loadSavedSession(); if(sv){ S=sv; if(typeof S.i!=='number')S.i=0; goScan(); } };
+  $('#btn-resume').onclick=()=>{ const sv=loadSavedSession(); if(sv){ S=sv; if(typeof S.cur!=='number')S.cur=0; if(!S.products&&S.rows){ S.products=S.rows.map((r,ix)=>({id:'P'+ix,data:r.data,code:r.code||'',at:r.at})); } goScan(); } };
   $('#btn-new').onclick=()=>{ clearSavedSession(); S=null; refreshResume(); toast('Nouvelle liste — importe ton fichier'); };
 
   $('#p-toggle').onclick=()=>{ const d=$('#p-details'); const open=d.classList.toggle('open'); $('#p-toggle').textContent= open?'Masquer les détails ▴':'Voir les détails ▾'; };
+  $('#btn-rearm').onclick=()=>{ if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume(); armSink(); toast('Scanner réarmé'); };
 
   $('#btn-cam-start').onclick=()=>{ if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume(); Scanner.start(); };
   $('#btn-cam-stop').onclick=()=>Scanner.stop();
 
   const mi=$('#manual-input');
-  const submitManual=()=>{ const v=mi.value.trim(); if(v){ assignCode(v,'manual'); mi.value=''; } };
+  const submitManual=()=>{ const v=mi.value.trim(); if(v){ assign(v); mi.value=''; } armSink(); };
   $('#btn-manual').onclick=submitManual;
   mi.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); submitManual(); } });
+  mi.addEventListener('focus', ()=>setStatus(false));
+  mi.addEventListener('blur', ()=>setTimeout(armSink,60));
 
   $('#btn-prev').onclick=goPrev; $('#btn-next').onclick=goNext; $('#btn-jump-next').onclick=goNextTodo;
-  $('#btn-list').onclick=openList; $('#btn-export').onclick=openExport; $('#btn-settings').onclick=openSettings;
+  $('#btn-list').onclick=openList; $('#btn-export').onclick=openExport; $('#btn-settings').onclick=()=>{ armSinkPause(); openSettings(); };
 
-  $$('[data-close]').forEach(b=> b.onclick=()=> b.closest('.modal').classList.remove('show'));
-  $$('.modal').forEach(m=> m.addEventListener('click', e=>{ if(e.target===m) m.classList.remove('show'); }));
+  $$('[data-close]').forEach(b=> b.onclick=()=>{ b.closest('.modal').classList.remove('show'); armSink(); });
+  $$('.modal').forEach(m=> m.addEventListener('click', e=>{ if(e.target===m){ m.classList.remove('show'); armSink(); } }));
 
   $('#list-search').addEventListener('input', renderList);
   $$('.filters button').forEach(b=> b.onclick=()=>{ $$('.filters button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); listFilter=b.dataset.filter; renderList(); });
 
-  $('#ex-audit').addEventListener('change', ()=>{});
   $('#btn-export-csv').onclick=exportCSV; $('#btn-export-xlsx').onclick=exportXLSX; $('#btn-export-odoo').onclick=exportOdoo; $('#btn-copy').onclick=copyMatrix;
+
+  // re-focalisation quand on tape/clique dans la zone scan (hors boutons/inputs)
+  $('#screen-scan').addEventListener('click', e=>{ if(e.target.closest('button,input,select,a,summary,.list-item')) return; armSink(); });
 
   bindSettings();
   $('#btn-reset').onclick=()=>{ if(confirm('Réinitialiser : la session en cours et les codes scannés seront effacés. Continuer ?')){ clearSavedSession(); S=null; $('#modal-settings').classList.remove('show'); goImport(); toast('Session réinitialisée'); } };
