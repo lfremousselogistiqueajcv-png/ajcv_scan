@@ -455,17 +455,18 @@ async function handleFile(file){
   const name=(file.name||'').toLowerCase();
   try{
     if(name.endsWith('.xlsx')||name.endsWith('.xls')){
-      await ensureXLSX();
+      try{ await ensureXLSX(); }
+      catch(e){ console.error(e); toast('Lecture Excel indisponible ici (hors-ligne). Réenregistre ton fichier en « CSV UTF-8 » et importe ce CSV.'); return; }
       const buf=await file.arrayBuffer();
       const wb=XLSX.read(buf,{type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
       const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',blankrows:false});
       buildPreview(rows.map(r=>r.map(c=> c==null?'':String(c))), file.name);
     } else {
-      const text=await file.text();
+      const text=(await file.text()).replace(/^\uFEFF/,''); // retire le BOM du CSV UTF-8 (Excel)
       buildPreview(parseCSVToRows(text).rows, file.name);
     }
-  }catch(err){ console.error(err); toast('Impossible de lire le fichier'); }
+  }catch(err){ console.error(err); toast('Impossible de lire le fichier'+(err&&err.message?(' — '+err.message):'')); }
 }
 function detectDelimiter(sample){
   const line=(sample.split(/\r?\n/).find(l=>l.trim()!=='')) || '';
